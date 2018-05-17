@@ -1,5 +1,12 @@
-from __future__ import print_function, division, absolute_import
+from __future__ import absolute_import, division, print_function
 
+from qtpy import QtCore
+from qtpy import PYQT5
+
+from glue.icons.qt import get_icon
+from glue.viewers.common.qt.tool import CheckableTool, Tool
+from glue.viewers.common.qt.mouse_mode import MouseMode
+from glue.viewers.common.qt.toolbar import BasicToolbar
 from qtpy import PYQT5
 from qtpy.QtWidgets import QMainWindow
 from qtpy.QtCore import Signal
@@ -17,14 +24,70 @@ except ImportError:
     from glue.viewers.image.qt.viewer_widget import StandaloneImageWidget as StandaloneImageViewer
 
 from glue.viewers.common.viz_client import init_mpl
-try:
-    from glue.viewers.common.qt.mpl_toolbar import MatplotlibViewerToolbar
-except ImportError:
-    from glue.viewers.matplotlib.qt.toolbar import MatplotlibViewerToolbar
+
 
 
 __all__ = ['Line1DWidget', 'DrawableImageWidget', 'MOSImageWidget']
 
+class MatplotlibViewerToolbar(BasicToolbar):
+
+    pan_begin = QtCore.Signal()
+    pan_end = QtCore.Signal()
+
+    def __init__(self, viewer):
+
+        self.canvas = viewer.central_widget.canvas
+
+        # Set up virtual Matplotlib navigation toolbar (don't show it)
+        self._mpl_nav = NavigationToolbar2QT(self.canvas, viewer)
+        self._mpl_nav.hide()
+
+        BasicToolbar.__init__(self, viewer)
+
+        viewer.window_closed.connect(self.close)
+
+    def close(self, *args):
+        self._mpl_nav.setParent(None)
+        self._mpl_nav.parent = None
+
+    def setup_default_modes(self):
+
+        # Set up default Matplotlib Tools - this gets called by the __init__
+        # call to the parent class above.
+
+        home_mode = HomeTool(self.parent(), toolbar=self._mpl_nav)
+        self.add_tool(home_mode)
+
+        save_mode = SaveTool(self.parent(), toolbar=self._mpl_nav)
+        self.add_tool(save_mode)
+
+        back_mode = BackTool(self.parent(), toolbar=self._mpl_nav)
+        self.add_tool(back_mode)
+
+        forward_mode = ForwardTool(self.parent(), toolbar=self._mpl_nav)
+        self.add_tool(forward_mode)
+
+        pan_mode = PanTool(self.parent(), toolbar=self._mpl_nav)
+        self.add_tool(pan_mode)
+
+        zoom_mode = ZoomTool(self.parent(), toolbar=self._mpl_nav)
+        self.add_tool(zoom_mode)
+
+        self._connections = []
+
+    def activate_tool(self, mode):
+        if isinstance(mode, MouseMode):
+            self._connections.append(self.canvas.mpl_connect('button_press_event', mode.press))
+            self._connections.append(self.canvas.mpl_connect('motion_notify_event', mode.move))
+            self._connections.append(self.canvas.mpl_connect('button_release_event', mode.release))
+            self._connections.append(self.canvas.mpl_connect('key_press_event', mode.key))
+        super(MatplotlibViewerToolbar, self).activate_tool(mode)
+
+    def deactivate_tool(self, mode):
+        for connection in self._connections:
+            self.canvas.mpl_disconnect(connection)
+        self._connections = []
+        super(MatplotlibViewerToolbar, self).deactivate_tool(mode)
 
 class Line1DWidget(QMainWindow):
     window_closed = Signal()

@@ -2,7 +2,7 @@
 
 from __future__ import absolute_import, division, print_function
 
-from glue.core.qt.data_combo_helper import ComponentIDComboHelper as OriginalComponentIDComboHelper
+from glue.core.data_combo_helper import ComponentIDComboHelper as OriginalComponentIDComboHelper
 from glue.core.hub import HubListener
 
 __all__ = ['ComponentIDComboHelper']

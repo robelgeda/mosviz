@@ -25,6 +25,10 @@ except ImportError:
 
 from glue.viewers.common.viz_client import init_mpl
 
+if PYQT5:
+    from matplotlib.backends.backend_qt5 import NavigationToolbar2QT
+else:
+    from matplotlib.backends.backend_qt4 import NavigationToolbar2QT
 
 
 __all__ = ['Line1DWidget', 'DrawableImageWidget', 'MOSImageWidget']

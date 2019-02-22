@@ -188,7 +188,8 @@ class LoaderSelectionDialog(QtWidgets.QDialog, HasCallbackProperties):
         super(LoaderSelectionDialog, self).accept()
 
     def _validation_checks(self, *args, **kwargs):
-
+        self.validate(True, "File '{0}' listed in column")
+        return
         # Check whether the files indicated by the filename columns do in fact
         # exist
         for column in ['spectrum1d', 'spectrum2d', 'cutout', 'level2']:

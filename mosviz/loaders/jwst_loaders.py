@@ -3,24 +3,58 @@ from astropy.io import fits
 from astropy.wcs import WCS
 from astropy.table import Table
 from glue.core import Data
+from astropy import units as u
 from glue.core.coordinates import coordinates_from_header, coordinates_from_wcs
+from specviz.third_party.glue.utils import SpectralCoordinates
 
-from .utils import mosviz_spectrum1d_loader, mosviz_spectrum2d_loader, mosviz_cutout_loader, mosviz_level2_loader
+from .utils import (mosviz_spectrum1d_loader, mosviz_spectrum2d_loader,
+                    mosviz_cutout_loader, mosviz_level2_loader,
+                    split_file_name)
 
 
 __all__ = ['pre_nirspec_spectrum1d_reader', 'pre_nirspec_spectrum2d_reader',
            'pre_nircam_image_reader', 'pre_nirspec_level2_reader']
 
 
+SPLITTER = '::'
+
+
+def split_file_name_ext(file_name):
+    split_file_name = file_name.split(SPLITTER)
+    len_split_file_name = len(split_file_name)
+    if len_split_file_name == 2:
+        file_name, ext = split_file_name
+        ext = int(ext)
+    elif len_split_file_name == 1:
+        ext = 0
+    else:
+        raise RuntimeError
+    return [file_name, ext]
+
+
 @mosviz_spectrum1d_loader("NIRSpec 1D Spectrum")
 def nirspec_spectrum1d_reader(file_name):
-    with fits.open(file_name) as hdulist:
-        header = hdulist['PRIMARY'].header
+    """
+    Data loader for simulated NIRSpec 2D spectrum.
+    This function extracts the DATA, QUALITY, and VAR
+    extensions and returns them as a glue Data object.
+    It then uses the header keywords of the DATA extension
+    to detemine the wavelengths.
+    """
 
-    tab = Table.read(file_name)
+    file_name, ext = split_file_name_ext(file_name)
+
+    with fits.open(file_name) as hdulist:
+        header = hdulist[ext].header
+
+    tab = Table.read(file_name, hdu=ext)
 
     data = Data(label="1D Spectrum")
     data.header = header
+
+    # This assumes the wavelength is in microns
+    data.coords = SpectralCoordinates(np.array(tab['WAVELENGTH']) * u.micron)
+
     data.add_component(tab['WAVELENGTH'], "Wavelength")
     data.add_component(tab['FLUX'], "Flux")
     data.add_component(tab['ERROR'], "Uncertainty")
@@ -32,26 +66,85 @@ def nirspec_spectrum1d_reader(file_name):
 def nirspec_spectrum2d_reader(file_name):
     """
     Data loader for simulated NIRSpec 2D spectrum.
-
     This function extracts the DATA, QUALITY, and VAR
     extensions and returns them as a glue Data object.
-
     It then uses the header keywords of the DATA extension
     to detemine the wavelengths.
     """
 
+    file_name, ext = split_file_name_ext(file_name)
+
     hdulist = fits.open(file_name)
 
     data = Data(label="2D Spectrum")
-    data.header = hdulist['PRIMARY'].header
-    data.coords = coordinates_from_header(hdulist[1].header)
-    data.add_component(hdulist['SCI'].data, 'Flux')
-    data.add_component(np.sqrt(hdulist['CON'].data), 'Uncertainty')
+    data.header = hdulist[ext].header
+    data.coords = coordinates_from_header(hdulist[ext].header)
+    data.add_component(hdulist[ext].data, 'Flux')
+    data.add_component(np.sqrt(hdulist[ext+2].data), 'Uncertainty')
 
     hdulist.close()
 
     return data
 
+# @mosviz_spectrum1d_loader("NIRSpec 1D Spectrum")
+# def nirspec_spectrum1d_reader(file_name):
+#     with fits.open(file_name) as hdulist:
+#         header = hdulist['PRIMARY'].header
+#
+#     tab = Table.read(file_name)
+#
+#     data = Data(label="1D Spectrum")
+#     data.header = header
+#
+#     # This assumes the wavelength is in microns
+#     data.coords = SpectralCoordinates(tab['WAVELENGTH'])
+#
+#     data.add_component(tab['WAVELENGTH'], "Wavelength")
+#     data.add_component(tab['FLUX'], "Flux")
+#     data.add_component(tab['ERROR'], "Uncertainty")
+#
+#     return data
+#
+#
+# @mosviz_spectrum2d_loader('NIRSpec 2D Spectrum')
+# def nirspec_spectrum2d_reader(file_name):
+#     """
+#     Data loader for simulated NIRSpec 2D spectrum.
+#
+#     This function extracts the DATA, QUALITY, and VAR
+#     extensions and returns them as a glue Data object.
+#
+#     It then uses the header keywords of the DATA extension
+#     to detemine the wavelengths.
+#     """
+#
+#     hdulist = fits.open(file_name)
+#
+#     data = Data(label="2D Spectrum")
+#     data.header = hdulist['PRIMARY'].header
+#     data.coords = coordinates_from_header(hdulist[1].header)
+#     data.add_component(hdulist['SCI'].data, 'Flux')
+#     data.add_component(np.sqrt(hdulist['CON'].data), 'Uncertainty')
+#
+#     hdulist.close()
+#
+#     return data
+
+@mosviz_level2_loader('NIRSpec 2D Level 2 Spectra')
+def nirspec_level2_reader(file_name):
+    file_name, ext = split_file_name(file_name)
+
+    hdulist = fits.open(file_name)
+
+    data = Data(label="2D Spectra")
+    data.header = hdulist[ext].header
+    data.coords = coordinates_from_header(hdulist[ext].header)
+    data.add_component(hdulist[ext].data, 'Flux')
+    data.add_component(np.sqrt(hdulist[ext + 2].data), 'Uncertainty')
+
+    hdulist.close()
+
+    return data
 
 @mosviz_spectrum1d_loader('Pre NIRSpec 1D Spectrum')
 def pre_nirspec_spectrum1d_reader(file_name):
@@ -75,6 +168,8 @@ def pre_nirspec_spectrum1d_reader(file_name):
 
     data = Data(label='1D Spectrum')
     data.header = hdulist['DATA'].header
+    # This assumes the wavelength is in microns
+    data.coords = SpectralCoordinates(wavelength * u.micron)
     data.add_component(wavelength, 'Wavelength')
     data.add_component(hdulist['DATA'].data, 'Flux')
     data.add_component(np.sqrt(hdulist['VAR'].data), 'Uncertainty')
